@@ -30,7 +30,7 @@ fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
             }
         }
     }
-    return files;
+    files
 }
 
 struct Settings{
