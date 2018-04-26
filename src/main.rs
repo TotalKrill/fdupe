@@ -13,7 +13,12 @@ fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
         match path {
             Ok(d) => {
                 if !d.path().is_dir() {
-                    files.push( PathBuf::from( fs::canonicalize( d.path() ).expect("") ) );
+                    let file = fs::canonicalize( d.path() );
+                    match file {
+                        Ok(v) => { files.push(PathBuf::from( v ) ); },
+                        Err(e) => { continue; },
+                        }
+
                 }
                 else {
                     let mut dirfiles = get_files_recursive( &d.path() );
@@ -21,7 +26,7 @@ fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
                 }
             },
             Err(e) => {
-                println!("error: {}", e.description() );
+                println!("error: {:?}", e );
             }
         }
     }
@@ -54,8 +59,8 @@ fn parse_args( _args: &Vec<String> ) -> Settings
         }
     } else {
         // assume we want to compare arg 1 directory with the other paths
-        println!("not implemented yet");
-        process::exit(1);
+        settings.search = _args[1].clone();
+        settings.compare = _args[2].clone();
     }
     return settings;
 }
