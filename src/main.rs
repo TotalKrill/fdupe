@@ -1,37 +1,8 @@
-use std::{path, fs, env, error::Error, path::PathBuf, process};
+use std::{path, env, path::PathBuf };
 
 extern crate fdupe;
-use fdupe::HashedPath;
+use fdupe::FileIdentification;
 
-fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
-{
-    let mut files: Vec<path::PathBuf> = Vec::new();
-
-    let paths = fs::read_dir( _path ).unwrap();
-
-    for path in paths {
-        match path {
-            Ok(d) => {
-                if !d.path().is_dir() {
-                    let file = fs::canonicalize( d.path() );
-                    match file {
-                        Ok(v) => { files.push(PathBuf::from( v ) ); },
-                        Err(e) => { continue; },
-                        }
-
-                }
-                else {
-                    let mut dirfiles = get_files_recursive( &d.path() );
-                    files.append( &mut dirfiles );
-                }
-            },
-            Err(e) => {
-                println!("error: {:?}", e );
-            }
-        }
-    }
-    files
-}
 
 struct Settings{
     search: String,
@@ -39,7 +10,7 @@ struct Settings{
     whole_dir: bool,
 }
 
-fn parse_args( _args: &Vec<String> ) -> Settings
+fn parse_args( _args: &[String]) -> Settings
 {
     let mut settings: Settings = Settings {
         search: String::from("."),
@@ -62,28 +33,39 @@ fn parse_args( _args: &Vec<String> ) -> Settings
         settings.search = _args[1].clone();
         settings.compare = _args[2].clone();
     }
-    return settings;
+    settings
 }
 
 fn run( settings: &Settings) {
     //set to find dupes for
-    let searchpath: PathBuf = PathBuf::from( &settings.search);
-    let searchfiles = get_files_recursive( searchpath.as_path());
+    let searchpath: PathBuf = PathBuf::from( &settings.search );
+    let searchfiles = fdupe::get_files_recursive( searchpath.as_path());
+
+    println!( "Checking {} files for duplicates",
+             &searchfiles.len() );
 
     // create set to compare to
     let comparepath: PathBuf = PathBuf::from( &settings.compare );
-    let comparefiles = get_files_recursive( comparepath.as_path() );
+    let comparefiles = fdupe::get_files_recursive( comparepath.as_path() );
 
-    let searchfiles: Vec< Result<HashedPath, std::io::Error>> = searchfiles.iter()
-        .map( |x| fdupe::hash_path( &x ) )
+    println!("against {} files",
+             &comparefiles.len() );
+
+    let searchfiles: Vec< Result<FileIdentification, std::io::Error>> = searchfiles.iter()
+        .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 
-    let comparefiles: Vec< Result<HashedPath, std::io::Error>> = comparefiles.iter()
-        .map( |x| fdupe::hash_path( &x ) )
+    println!("Hashed Searchfiles");
+
+    let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.iter()
+        .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 
-    let searchfiles: Vec< &fdupe::HashedPath > = searchfiles.iter().flat_map( |x| x).collect();
-    let comparefiles: Vec< &fdupe::HashedPath > = comparefiles.iter().flat_map( |x| x).collect();
+    println!("Hashed Comparefiles");
+
+
+    let searchfiles: Vec< &fdupe::FileIdentification > = searchfiles.iter().flat_map( |x| x).collect();
+    let comparefiles: Vec< &fdupe::FileIdentification > = comparefiles.iter().flat_map( |x| x).collect();
 
     for sfile in &searchfiles {
         for cfile in &comparefiles {
