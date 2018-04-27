@@ -37,9 +37,16 @@ fn parse_args( _args: &[String]) -> Settings
 }
 
 fn run( settings: &Settings) {
+
     //set to find dupes for
     let searchpath: PathBuf = PathBuf::from( &settings.search );
-    let searchfiles = fdupe::get_files_recursive( searchpath.as_path());
+    let mut searchfiles: Vec< path::PathBuf> = Vec::new();
+
+    if settings.whole_dir {
+        searchfiles = fdupe::get_files_recursive( searchpath.as_path());
+    } else {
+        searchfiles.push( searchpath );
+    }
 
     println!( "Checking {} files for duplicates",
              &searchfiles.len() );
