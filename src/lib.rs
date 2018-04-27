@@ -17,6 +17,11 @@ pub struct FileIdentification {
     pub size: u64,
 }
 
+pub struct DuplicationReport {
+    original: FileIdentification,
+    dupes: Vec< FileIdentification >,
+}
+
 impl FileIdentification {
     pub fn new( path: &path::Path ) -> Result<FileIdentification, std::io::Error > {
 
