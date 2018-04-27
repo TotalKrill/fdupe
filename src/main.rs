@@ -63,6 +63,11 @@ fn run( settings: &Settings) {
         .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 
+    for file in &searchfiles {
+        // dont check files both ways, have they been checked once, dont check again
+        println!("{:?}", file);
+    }
+
     println!("Hashed Searchfiles");
 
     let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.iter()
@@ -75,19 +80,20 @@ fn run( settings: &Settings) {
     let searchfiles: Vec< fdupe::FileIdentification > = searchfiles.into_iter()
         .flat_map( |x| x)
         .collect();
+
     let mut comparefiles: Vec< fdupe::FileIdentification > = comparefiles.into_iter()
         .flat_map( |x| x)
         .collect();
 
     let mut reports: Vec< fdupe::DuplicateReport > = Vec::new();
     for file in searchfiles {
+        // dont check files both ways, have they been checked once, dont check again
         if !file_has_been_checked( &file, &reports ) {
             let report = DuplicateReport::new( &file, &comparefiles );
             for dupe in report.duplicates() {
                 comparefiles.remove_item( &dupe );
                 comparefiles.remove_item( &file );
             }
-
             reports.push( report );
         }
     }

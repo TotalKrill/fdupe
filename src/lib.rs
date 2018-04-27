@@ -47,6 +47,12 @@ impl fmt::Display for FileIdentification
         write!(f, "{}: {:x}", self.path, self.hash)
     }
 }
+impl fmt::Debug for FileIdentification
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {:x}", self.path, self.hash)
+    }
+}
 
 pub struct DuplicateReport {
     original: FileIdentification,
@@ -108,10 +114,8 @@ impl DuplicateReport {
 pub fn get_hash_at( _path : &path::Path ) -> Result< md5::Digest, std::io::Error>
 {
     let f = File::open( _path )?;
-    let mut s = String::new();
-    BufReader::new( f ).read_to_string(&mut s)?;
-
-    let bytes =  s.into_bytes();
+    let mut bytes: Vec<u8> = Vec::new();
+    BufReader::new( f ).read_to_end(&mut bytes)?;
     let hash = md5::compute( bytes );
     Ok( hash )
 }
@@ -184,16 +188,37 @@ pub fn file_has_been_checked( fileid: &FileIdentification, reports: &Vec< Duplic
 }
 
 extern crate test;
+use test::Bencher;
+use std::ops::Deref;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[bench]
+    fn get_hash(b: &mut Bencher) {
+        let oristr =  &String::from("./testdata/cats.jpg");
+        let dig = get_hash_at( &path::PathBuf::from(oristr) )
+        .expect("Could not get hash");
+        let hash: [u8; 16] = [ 0xc4,0x7f,0xac,0x96,0xd7,0x35,0xc6,0xc5,0x88,0xab,0xac,0x8d,0xf0,0x38,0x2f,0xdc];
+        assert!( dig.deref() == &hash );
+
+        b.iter(|| get_hash_at( &path::PathBuf::from(oristr) ) )
+    }
+
+    #[test]
+    fn identify_img_file() {
+        let oristr =  &String::from("./testdata/cats.jpg");
+        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+            .expect("Error with original");
+    }
 
     #[test]
     fn find_files_ignore_errors() {
         let files = get_files_recursive_at( &String::from( "./testdata" ) )
             .expect("Failed getting the files");
 
-        assert_eq!( files.len(), 6, "got wrong amount of files");
+        assert_eq!( files.len(), 7, "got wrong amount of files");
     }
 
     #[test]
@@ -233,6 +258,23 @@ mod tests {
         let report: DuplicateReport = DuplicateReport::new( &original, &files );
 
         assert_eq!( report.number_duplicates(), 0 );
+
+    }
+
+    #[bench]
+    fn bench_new_duplicatereports(b: &mut Bencher) {
+        let oristr =  &String::from("./testdata/cats.jpg");
+        let testdir = &String::from( "./testdata/pics" );
+        let files = get_files_recursive_at( testdir )
+            .expect("Failed getting the files");
+        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+            .expect("Error with original");
+
+        let files: Vec<FileIdentification> = hash_vector( files ).into_iter()
+            .filter_map( |res| res.ok() )
+            .collect();
+
+        b.iter(|| DuplicateReport::new( &original, &files ) );
     }
 
 
