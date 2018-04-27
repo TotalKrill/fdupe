@@ -10,16 +10,11 @@ use std::path;
 use std::fs;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct FileIdentification {
     pub path: String,
     pub hash: md5::Digest,
     pub size: u64,
-}
-
-pub struct DuplicationReport {
-    original: FileIdentification,
-    dupes: Vec< FileIdentification >,
 }
 
 impl FileIdentification {
@@ -36,12 +31,62 @@ impl FileIdentification {
         } )
 
     }
+
+    pub fn is_duplicate_of(&self, other: &FileIdentification) -> bool {
+        let duplicate: bool = ( self.path != other.path ) &&
+            ( self.hash == other.hash ) &&
+            ( self.size == other.size );
+        duplicate
+    }
+
 }
 
 impl fmt::Display for FileIdentification
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {:x}", self.path, self.hash)
+    }
+}
+
+pub struct DuplicateReport {
+    original: FileIdentification,
+    duplicates: Vec< FileIdentification >,
+}
+
+impl DuplicateReport {
+
+    pub fn new( original: &FileIdentification, check_files: &Vec< FileIdentification > ) -> DuplicateReport {
+
+        let mut duplicates: Vec< FileIdentification> = Vec::new();
+        for file in check_files {
+            if file.is_duplicate_of( original ) {
+                duplicates.push( file.clone() );
+            }
+        }
+
+        let report: DuplicateReport = DuplicateReport{ original: original.clone(), duplicates };
+        report
+    }
+
+    pub fn number_duplicates(&self) -> usize {
+        self.duplicates.len()
+    }
+
+
+    pub fn size_duplicates(&self) -> u64 {
+        let sum: u64 = self.original.size * self.duplicates.len() as u64;
+        sum
+    }
+
+    pub fn print(&self) {
+        println!("{}", self.original);
+        println!("Has {} duplicates, totaling {} Bytes",
+                self.duplicates.len(),
+                self.size_duplicates() );
+        println!("==========================================");
+        for dupe in &self.duplicates {
+            println!("{}", dupe);
+        }
     }
 }
 
@@ -107,6 +152,15 @@ pub fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
     files
 }
 
+pub fn hash_vector( vec: Vec< path::PathBuf > )
+    -> Vec< Result< FileIdentification, std::io::Error > >{
+
+    let hashed: Vec< Result<FileIdentification, std::io::Error>> = vec.iter()
+        .map( |x| FileIdentification::new( &x ) )
+        .collect();
+    hashed
+}
+
 extern crate test;
 #[cfg(test)]
 mod tests {
@@ -114,9 +168,50 @@ mod tests {
 
     #[test]
     fn find_files_ignore_errors() {
-        let files = get_files_recursive_at( &String::from( "./testdata" ) ).expect("Failed getting the files");
+        let files = get_files_recursive_at( &String::from( "./testdata" ) )
+            .expect("Failed getting the files");
 
         assert_eq!( files.len(), 6, "got wrong amount of files");
     }
+
+    #[test]
+    fn find_dupes_of_original() {
+
+        let oristr =  &String::from("./testdata/original");
+        let testdir = &String::from( "./testdata" );
+        let files = get_files_recursive_at( testdir )
+            .expect("Failed getting the files");
+        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+            .expect("Error with original");
+
+        let files: Vec<FileIdentification> = hash_vector( files ).into_iter()
+            .filter_map( |res| res.ok() )
+            .collect();
+
+        let report: DuplicateReport = DuplicateReport::new( &original, &files );
+
+        assert_eq!( report.number_duplicates(), 3 );
+
+    }
+
+    #[test]
+    fn find_no_dupes() {
+
+        let oristr =  &String::from("./testdata/a");
+        let testdir = &String::from( "./testdata" );
+        let files = get_files_recursive_at( testdir )
+            .expect("Failed getting the files");
+        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+            .expect("Error with original");
+
+        let files: Vec<FileIdentification> = hash_vector( files ).into_iter()
+            .filter_map( |res| res.ok() )
+            .collect();
+
+        let report: DuplicateReport = DuplicateReport::new( &original, &files );
+
+        assert_eq!( report.number_duplicates(), 0 );
+    }
+
 
 }
