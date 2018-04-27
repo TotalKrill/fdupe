@@ -71,6 +71,9 @@ impl DuplicateReport {
     pub fn number_duplicates(&self) -> usize {
         self.duplicates.len()
     }
+    pub fn duplicates(&self) -> &Vec< FileIdentification > {
+        &self.duplicates
+    }
 
 
     pub fn size_duplicates(&self) -> u64 {
@@ -88,20 +91,28 @@ impl DuplicateReport {
             println!("{}", dupe);
         }
     }
+    pub fn mentions( &self, fileid: &FileIdentification )
+        -> bool {
+            if fileid == &self.original {
+                return true;
+            }
+            for id in &self.duplicates {
+                if fileid == id {
+                    return true;
+                }
+            }
+            return false;
+        }
 }
 
 pub fn get_hash_at( _path : &path::Path ) -> Result< md5::Digest, std::io::Error>
 {
     let f = File::open( _path )?;
-
     let mut s = String::new();
-
     BufReader::new( f ).read_to_string(&mut s)?;
 
     let bytes =  s.into_bytes();
-
     let hash = md5::compute( bytes );
-
     Ok( hash )
 }
 
@@ -159,6 +170,17 @@ pub fn hash_vector( vec: Vec< path::PathBuf > )
         .map( |x| FileIdentification::new( &x ) )
         .collect();
     hashed
+}
+
+pub fn file_has_been_checked( fileid: &FileIdentification, reports: &Vec< DuplicateReport > )
+    -> bool
+{
+    for report in reports {
+        if report.mentions( fileid ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 extern crate test;

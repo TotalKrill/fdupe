@@ -1,7 +1,8 @@
+#![feature( vec_remove_item )]
 use std::{path, env, path::PathBuf };
 
 extern crate fdupe;
-use fdupe::FileIdentification;
+use fdupe::*;
 
 
 struct Settings{
@@ -71,26 +72,35 @@ fn run( settings: &Settings) {
     println!("Hashed Comparefiles");
 
 
-    let searchfiles: Vec< &fdupe::FileIdentification > = searchfiles.iter().flat_map( |x| x).collect();
-    let comparefiles: Vec< &fdupe::FileIdentification > = comparefiles.iter().flat_map( |x| x).collect();
+    let searchfiles: Vec< fdupe::FileIdentification > = searchfiles.into_iter()
+        .flat_map( |x| x)
+        .collect();
+    let mut comparefiles: Vec< fdupe::FileIdentification > = comparefiles.into_iter()
+        .flat_map( |x| x)
+        .collect();
 
-    for sfile in &searchfiles {
-        for cfile in &comparefiles {
-            if ( sfile != cfile ) &&
-                ( sfile.hash == cfile.hash )
-                {
-                    println!("Original {}", sfile );
-                    println!("Dupe {}", cfile );
-                }
+    let mut reports: Vec< fdupe::DuplicateReport > = Vec::new();
+    for file in searchfiles {
+        if !file_has_been_checked( &file, &reports ) {
+            let report = DuplicateReport::new( &file, &comparefiles );
+            for dupe in report.duplicates() {
+                comparefiles.remove_item( &dupe );
+                comparefiles.remove_item( &file );
+            }
+
+            reports.push( report );
         }
     }
 
-    // for file in &files {
-    //     match file {
-    //         Ok(v) => println!("{}", v ),
-    //         Err(e) => println!("Error: {}", e),
-    //     }
-    // }
+    // let reports: Vec< fdupe::DuplicateReport > = searchfiles.iter()
+    //     .map( |x| fdupe::DuplicateReport::new( x, &comparefiles ) )
+    //     .collect();
+
+    for report in reports {
+        println!("\n");
+        report.print();
+        println!("\n");
+    }
 }
 
 fn main() {
