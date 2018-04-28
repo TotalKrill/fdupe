@@ -1,6 +1,8 @@
 #![feature(test)]
 
-extern crate md5;
+extern crate crypto;
+use crypto::md5::Md5;
+use crypto::digest::Digest;
 
 use std::fs::File;
 use std::io::Read;
@@ -13,7 +15,7 @@ use std::fs;
 #[derive(PartialEq, Eq, Clone)]
 pub struct FileIdentification {
     pub path: String,
-    pub hash: md5::Digest,
+    pub hash: [u8; 16],
     pub size: u64,
 }
 
@@ -21,7 +23,7 @@ impl FileIdentification {
     pub fn new( path: &path::Path ) -> Result<FileIdentification, std::io::Error > {
 
         let file = fs::canonicalize( path )?;
-        let hash: md5::Digest  = get_hash_at( path )?;
+        let hash: [u8; 16]  = get_md5_hash_at( path )?;
         let size = fs::metadata(path)?.len();
 
         Ok( FileIdentification{
@@ -44,13 +46,13 @@ impl FileIdentification {
 impl fmt::Display for FileIdentification
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:x}", self.path, self.hash)
+        write!(f, "{}: {:?}", self.path, self.hash)
     }
 }
 impl fmt::Debug for FileIdentification
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:x}", self.path, self.hash)
+        write!(f, "{}: {:?}", self.path, self.hash)
     }
 }
 
@@ -61,7 +63,7 @@ pub struct DuplicateReport {
 
 impl DuplicateReport {
 
-    pub fn new( original: &FileIdentification, check_files: &Vec< FileIdentification > ) -> DuplicateReport {
+    pub fn new( original: &FileIdentification, check_files: &[FileIdentification] ) -> DuplicateReport {
 
         let mut duplicates: Vec< FileIdentification> = Vec::new();
         for file in check_files {
@@ -111,13 +113,18 @@ impl DuplicateReport {
         }
 }
 
-pub fn get_hash_at( _path : &path::Path ) -> Result< md5::Digest, std::io::Error>
+pub fn get_md5_hash_at( _path : &path::Path ) -> Result< [u8; 16], std::io::Error>
 {
     let f = File::open( _path )?;
+
     let mut bytes: Vec<u8> = Vec::new();
+    let mut hasher = Md5::new();
     BufReader::new( f ).read_to_end(&mut bytes)?;
-    let hash = md5::compute( bytes );
-    Ok( hash )
+
+    hasher.input( &bytes );
+    let mut output = [0; 16];
+    hasher.result( &mut output );
+    Ok( output )
 }
 
 pub fn get_files_recursive_at( path: &str ) -> Result< Vec<path::PathBuf>, std::io::Error> {
@@ -167,7 +174,7 @@ pub fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
     files
 }
 
-pub fn hash_vector( vec: Vec< path::PathBuf > )
+pub fn hash_vector( vec: &[path::PathBuf]  )
     -> Vec< Result< FileIdentification, std::io::Error > >{
 
     let hashed: Vec< Result<FileIdentification, std::io::Error>> = vec.iter()
@@ -176,7 +183,7 @@ pub fn hash_vector( vec: Vec< path::PathBuf > )
     hashed
 }
 
-pub fn file_has_been_checked( fileid: &FileIdentification, reports: &Vec< DuplicateReport > )
+pub fn file_has_been_checked( fileid: &FileIdentification, reports: &[DuplicateReport]  )
     -> bool
 {
     for report in reports {
@@ -188,22 +195,23 @@ pub fn file_has_been_checked( fileid: &FileIdentification, reports: &Vec< Duplic
 }
 
 extern crate test;
-use test::Bencher;
-use std::ops::Deref;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use test::Bencher;
     #[bench]
-    fn get_hash(b: &mut Bencher) {
+    fn get_hash_md5(b: &mut Bencher) {
         let oristr =  &String::from("./testdata/cats.jpg");
-        let dig = get_hash_at( &path::PathBuf::from(oristr) )
+        let dig = get_md5_hash_at( &path::PathBuf::from(oristr) )
         .expect("Could not get hash");
-        let hash: [u8; 16] = [ 0xc4,0x7f,0xac,0x96,0xd7,0x35,0xc6,0xc5,0x88,0xab,0xac,0x8d,0xf0,0x38,0x2f,0xdc];
-        assert!( dig.deref() == &hash );
 
-        b.iter(|| get_hash_at( &path::PathBuf::from(oristr) ) )
+        let hash: [u8; 16] =
+            [0xc4,0x7f,0xac,0x96,0xd7,0x35,0xc6,0xc5,0x88,0xab,0xac,0x8d,0xf0,0x38,0x2f,0xdc];
+
+        assert!( &dig == &hash, "Dig was {:?}", dig);
+
+        b.iter(|| get_md5_hash_at( &path::PathBuf::from(oristr) ) )
     }
 
     #[test]
@@ -218,7 +226,7 @@ mod tests {
         let files = get_files_recursive_at( &String::from( "./testdata" ) )
             .expect("Failed getting the files");
 
-        assert_eq!( files.len(), 7, "got wrong amount of files");
+        assert_eq!( files.len(), 22, "got wrong amount of files");
     }
 
     #[test]
@@ -231,7 +239,7 @@ mod tests {
         let original = FileIdentification::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
 
-        let files: Vec<FileIdentification> = hash_vector( files ).into_iter()
+        let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
             .filter_map( |res| res.ok() )
             .collect();
 
@@ -251,7 +259,7 @@ mod tests {
         let original = FileIdentification::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
 
-        let files: Vec<FileIdentification> = hash_vector( files ).into_iter()
+        let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
             .filter_map( |res| res.ok() )
             .collect();
 
@@ -270,7 +278,7 @@ mod tests {
         let original = FileIdentification::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
 
-        let files: Vec<FileIdentification> = hash_vector( files ).into_iter()
+        let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
             .filter_map( |res| res.ok() )
             .collect();
 

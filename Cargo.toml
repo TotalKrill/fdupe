@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Kristoffer Ödmark <kristoffer.odmark90@gmail.com>"]
 
 [dependencies]
-md5 = "*"
+rust-crypto ="*"

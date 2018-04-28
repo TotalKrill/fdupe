@@ -41,6 +41,7 @@ fn run( settings: &Settings) {
 
     //set to find dupes for
     let searchpath: PathBuf = PathBuf::from( &settings.search );
+
     let mut searchfiles: Vec< path::PathBuf> = Vec::new();
 
     if settings.whole_dir {
@@ -63,11 +64,6 @@ fn run( settings: &Settings) {
         .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 
-    for file in &searchfiles {
-        // dont check files both ways, have they been checked once, dont check again
-        println!("{:?}", file);
-    }
-
     println!("Hashed Searchfiles");
 
     let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.iter()
@@ -86,8 +82,9 @@ fn run( settings: &Settings) {
         .collect();
 
     let mut reports: Vec< fdupe::DuplicateReport > = Vec::new();
-    for file in searchfiles {
+    for (i, file) in searchfiles.iter().enumerate() {
         // dont check files both ways, have they been checked once, dont check again
+        print!("\rChecking: {}/{}", i +1, &searchfiles.len() );
         if !file_has_been_checked( &file, &reports ) {
             let report = DuplicateReport::new( &file, &comparefiles );
             for dupe in report.duplicates() {
@@ -97,6 +94,7 @@ fn run( settings: &Settings) {
             reports.push( report );
         }
     }
+    println!();
 
     // let reports: Vec< fdupe::DuplicateReport > = searchfiles.iter()
     //     .map( |x| fdupe::DuplicateReport::new( x, &comparefiles ) )
