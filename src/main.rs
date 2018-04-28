@@ -67,14 +67,9 @@ fn run( settings: &Settings) {
         .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 
-    println!("Hashed Searchfiles");
-
     let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.par_iter()
         .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
-
-    println!("Hashed Comparefiles");
-
 
     let searchfiles: Vec< fdupe::FileIdentification > = searchfiles.into_iter()
         .flat_map( |x| x)

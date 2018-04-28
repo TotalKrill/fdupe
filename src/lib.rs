@@ -4,12 +4,16 @@ extern crate crypto;
 use crypto::md5::Md5;
 use crypto::digest::Digest;
 
+extern crate rayon;
+use rayon::prelude::*;
+
 use std::fs::File;
 use std::io::Read;
 use std::io::BufReader;
 use std::fmt;
 use std::path;
 use std::fs;
+
 
 
 #[derive(PartialEq, Eq, Clone)]
@@ -23,7 +27,7 @@ impl FileIdentification {
     pub fn new( path: &path::Path ) -> Result<FileIdentification, std::io::Error > {
 
         let file = fs::canonicalize( path )?;
-        let hash: [u8; 16]  = get_md5_hash_at( path )?;
+        let hash: [u8; 16]  = [0; 16];
         let size = fs::metadata(path)?.len();
 
         Ok( FileIdentification{
@@ -34,11 +38,20 @@ impl FileIdentification {
 
     }
 
+    pub fn get_md5( &self ) -> Result< [u8; 16], std::io::Error >{
+        let hash: [u8; 16]  = get_md5_hash_at( &path::PathBuf::from( &self.path ) )?;
+        Ok(hash)
+    }
+
     pub fn is_duplicate_of(&self, other: &FileIdentification) -> bool {
-        let duplicate: bool = ( self.path != other.path ) &&
-            ( self.hash == other.hash ) &&
-            ( self.size == other.size );
-        duplicate
+        if self.path == other.path  {
+            return false;
+        } else if self.size != other.size {
+            return false;
+        } else if self.get_md5().ok() != other.get_md5().ok() {
+            return false;
+        }
+        return true;
     }
 
 }
@@ -177,7 +190,7 @@ pub fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
 pub fn hash_vector( vec: &[path::PathBuf]  )
     -> Vec< Result< FileIdentification, std::io::Error > >{
 
-    let hashed: Vec< Result<FileIdentification, std::io::Error>> = vec.iter()
+    let hashed: Vec< Result<FileIdentification, std::io::Error>> = vec.par_iter()
         .map( |x| FileIdentification::new( &x ) )
         .collect();
     hashed
@@ -197,9 +210,6 @@ pub fn file_has_been_checked( fileid: &FileIdentification, reports: &[DuplicateR
 extern crate test;
 
 #[cfg(test)]
-
-extern crate rayon;
-use rayon::prelude::*;
 
 mod tests {
     use super::*;
@@ -275,34 +285,21 @@ mod tests {
 
     #[bench]
     fn bench_new_duplicatereports(b: &mut Bencher) {
-        let oristr =  &String::from("./testdata/cats.jpg");
-        let testdir = &String::from( "./testdata" );
-        let files = get_files_recursive_at( testdir )
-            .expect("Failed getting the files");
-        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
-            .expect("Error with original");
+        b.iter(|| {
+            let oristr =  &String::from("./testdata/cats.jpg");
+            let testdir = &String::from( "./testdata" );
+            let files = get_files_recursive_at( testdir )
+                .expect("Failed getting the files");
+            let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+                .expect("Error with original");
 
-        let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
-            .filter_map( |res| res.ok() )
-            .collect();
+            let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
+                .filter_map( |res| res.ok() )
+                .collect();
+            let rep = DuplicateReport::new( &original, &files );
+            assert_eq!(rep.duplicates().len(), 2, "Did not find enought cat dupes");
+        });
 
-        b.iter(|| DuplicateReport::new( &original, &files ) );
     }
-    #[bench]
-    fn bench_new_duplicatereports_par(b: &mut Bencher) {
-        let oristr =  &String::from("./testdata/cats.jpg");
-        let testdir = &String::from( "./testdata" );
-        let files = get_files_recursive_at( testdir )
-            .expect("Failed getting the files");
-        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
-            .expect("Error with original");
-
-        let files: Vec<FileIdentification> = hash_vector( &files ).into_par_iter()
-            .filter_map( |res| res.ok() )
-            .collect();
-
-        b.iter(|| DuplicateReport::new( &original, &files ) );
-    }
-
 
 }
