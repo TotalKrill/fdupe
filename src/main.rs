@@ -4,6 +4,9 @@ use std::{path, env, path::PathBuf };
 extern crate fdupe;
 use fdupe::*;
 
+extern crate rayon;
+use rayon::prelude::*;
+
 
 struct Settings{
     search: String,
@@ -60,13 +63,13 @@ fn run( settings: &Settings) {
     println!("against {} files",
              &comparefiles.len() );
 
-    let searchfiles: Vec< Result<FileIdentification, std::io::Error>> = searchfiles.iter()
+    let searchfiles: Vec< Result<FileIdentification, std::io::Error>> = searchfiles.par_iter()
         .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 
     println!("Hashed Searchfiles");
 
-    let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.iter()
+    let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.par_iter()
         .map( |x| fdupe::FileIdentification::new( &x ) )
         .collect();
 

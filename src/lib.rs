@@ -197,6 +197,10 @@ pub fn file_has_been_checked( fileid: &FileIdentification, reports: &[DuplicateR
 extern crate test;
 
 #[cfg(test)]
+
+extern crate rayon;
+use rayon::prelude::*;
+
 mod tests {
     use super::*;
     use test::Bencher;
@@ -272,13 +276,28 @@ mod tests {
     #[bench]
     fn bench_new_duplicatereports(b: &mut Bencher) {
         let oristr =  &String::from("./testdata/cats.jpg");
-        let testdir = &String::from( "./testdata/pics" );
+        let testdir = &String::from( "./testdata" );
         let files = get_files_recursive_at( testdir )
             .expect("Failed getting the files");
         let original = FileIdentification::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
 
         let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
+            .filter_map( |res| res.ok() )
+            .collect();
+
+        b.iter(|| DuplicateReport::new( &original, &files ) );
+    }
+    #[bench]
+    fn bench_new_duplicatereports_par(b: &mut Bencher) {
+        let oristr =  &String::from("./testdata/cats.jpg");
+        let testdir = &String::from( "./testdata" );
+        let files = get_files_recursive_at( testdir )
+            .expect("Failed getting the files");
+        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+            .expect("Error with original");
+
+        let files: Vec<FileIdentification> = hash_vector( &files ).into_par_iter()
             .filter_map( |res| res.ok() )
             .collect();
 
