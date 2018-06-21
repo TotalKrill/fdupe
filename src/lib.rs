@@ -1,10 +1,7 @@
 #![feature(test)]
-
-extern crate crypto;
-use crypto::md5::Md5;
-use crypto::digest::Digest;
-
 extern crate rayon;
+extern crate sha1;
+
 use rayon::prelude::*;
 
 use std::fs::File;
@@ -14,138 +11,19 @@ use std::fmt;
 use std::path;
 use std::fs;
 
+mod file;
+mod hasher;
+mod lazyfile;
+mod metadata;
 
-
-#[derive(PartialEq, Eq, Clone)]
-pub struct FileIdentification {
-    pub path: String,
-    pub hash: [u8; 16],
-    pub size: u64,
-}
-
-impl FileIdentification {
-    pub fn new( path: &path::Path ) -> Result<FileIdentification, std::io::Error > {
-
-        let file = fs::canonicalize( path )?;
-        let hash: [u8; 16]  = [0; 16];
-        let size = fs::metadata(path)?.len();
-
-        Ok( FileIdentification{
-                path: file.display().to_string() ,
-                hash,
-                size,
-        } )
-
-    }
-
-    pub fn get_md5( &self ) -> Result< [u8; 16], std::io::Error >{
-        let hash: [u8; 16]  = get_md5_hash_at( &path::PathBuf::from( &self.path ) )?;
-        Ok(hash)
-    }
-
-    pub fn is_duplicate_of(&self, other: &FileIdentification) -> bool {
-        if self.path == other.path  {
-            return false;
-        } else if self.size != other.size {
-            return false;
-        } else if self.get_md5().ok() != other.get_md5().ok() {
-            return false;
-        }
-        return true;
-    }
-
-}
-
-impl fmt::Display for FileIdentification
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:?}", self.path, self.hash)
-    }
-}
-impl fmt::Debug for FileIdentification
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:?}", self.path, self.hash)
-    }
-}
-
-pub struct DuplicateReport {
-    original: FileIdentification,
-    duplicates: Vec< FileIdentification >,
-}
-
-impl DuplicateReport {
-
-    pub fn new( original: &FileIdentification, check_files: &[FileIdentification] ) -> DuplicateReport {
-
-        let mut duplicates: Vec< FileIdentification> = Vec::new();
-        for file in check_files {
-            if file.is_duplicate_of( original ) {
-                duplicates.push( file.clone() );
-            }
-        }
-
-        let report: DuplicateReport = DuplicateReport{ original: original.clone(), duplicates };
-        report
-    }
-
-    pub fn number_duplicates(&self) -> usize {
-        self.duplicates.len()
-    }
-    pub fn duplicates(&self) -> &Vec< FileIdentification > {
-        &self.duplicates
-    }
-
-
-    pub fn size_duplicates(&self) -> u64 {
-        let sum: u64 = self.original.size * self.duplicates.len() as u64;
-        sum
-    }
-
-    pub fn print(&self) {
-        println!("{}", self.original);
-        println!("Has {} duplicates, totaling {} Bytes",
-                self.duplicates.len(),
-                self.size_duplicates() );
-        println!("==========================================");
-        for dupe in &self.duplicates {
-            println!("{}", dupe);
-        }
-    }
-    pub fn mentions( &self, fileid: &FileIdentification )
-        -> bool {
-            if fileid == &self.original {
-                return true;
-            }
-            for id in &self.duplicates {
-                if fileid == id {
-                    return true;
-                }
-            }
-            return false;
-        }
-}
-
-pub fn get_md5_hash_at( _path : &path::Path ) -> Result< [u8; 16], std::io::Error>
-{
-    let f = File::open( _path )?;
-
-    let mut bytes: Vec<u8> = Vec::new();
-    let mut hasher = Md5::new();
-    BufReader::new( f ).read_to_end(&mut bytes)?;
-
-    hasher.input( &bytes );
-    let mut output = [0; 16];
-    hasher.result( &mut output );
-    Ok( output )
-}
+pub use file::FileContent;
+pub use metadata::Metadata;
+pub use hasher::Hasher;
 
 pub fn get_files_recursive_at( path: &str ) -> Result< Vec<path::PathBuf>, std::io::Error> {
-
     let path = path::PathBuf::from( path );
     Ok( get_files_recursive( &path ))
 }
-
 
 /// Uses the given path and recursively visits all subfolder, return all files and ignores any errors
 pub fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
@@ -187,26 +65,6 @@ pub fn get_files_recursive( _path: &path::Path ) -> Vec<path::PathBuf>
     files
 }
 
-pub fn hash_vector( vec: &[path::PathBuf]  )
-    -> Vec< Result< FileIdentification, std::io::Error > >{
-
-    let hashed: Vec< Result<FileIdentification, std::io::Error>> = vec.par_iter()
-        .map( |x| FileIdentification::new( &x ) )
-        .collect();
-    hashed
-}
-
-pub fn file_has_been_checked( fileid: &FileIdentification, reports: &[DuplicateReport]  )
-    -> bool
-{
-    for report in reports {
-        if report.mentions( fileid ) {
-            return true;
-        }
-    }
-    return false;
-}
-
 extern crate test;
 
 #[cfg(test)]
@@ -231,7 +89,7 @@ mod tests {
     #[test]
     fn identify_img_file() {
         let oristr =  &String::from("./testdata/cats.jpg");
-        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+        let original = FileContent::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
     }
 
@@ -250,10 +108,10 @@ mod tests {
         let testdir = &String::from( "./testdata" );
         let files = get_files_recursive_at( testdir )
             .expect("Failed getting the files");
-        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+        let original = FileContent::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
 
-        let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
+        let files: Vec<FileContent> = hash_vector( &files ).into_iter()
             .filter_map( |res| res.ok() )
             .collect();
 
@@ -270,10 +128,10 @@ mod tests {
         let testdir = &String::from( "./testdata" );
         let files = get_files_recursive_at( testdir )
             .expect("Failed getting the files");
-        let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+        let original = FileContent::new( &path::PathBuf::from( oristr ))
             .expect("Error with original");
 
-        let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
+        let files: Vec<FileContent> = hash_vector( &files ).into_iter()
             .filter_map( |res| res.ok() )
             .collect();
 
@@ -290,10 +148,10 @@ mod tests {
             let testdir = &String::from( "./testdata" );
             let files = get_files_recursive_at( testdir )
                 .expect("Failed getting the files");
-            let original = FileIdentification::new( &path::PathBuf::from( oristr ))
+            let original = FileContent::new( &path::PathBuf::from( oristr ))
                 .expect("Error with original");
 
-            let files: Vec<FileIdentification> = hash_vector( &files ).into_iter()
+            let files: Vec<FileContent> = hash_vector( &files ).into_iter()
                 .filter_map( |res| res.ok() )
                 .collect();
             let rep = DuplicateReport::new( &original, &files );

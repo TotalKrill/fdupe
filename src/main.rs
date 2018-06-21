@@ -13,6 +13,8 @@ struct Settings{
     compare: String,
     whole_dir: bool,
 }
+mod file;
+use fdupe::FileContent;
 
 fn parse_args( _args: &[String]) -> Settings
 {
@@ -56,53 +58,31 @@ fn run( settings: &Settings) {
     println!( "Checking {} files for duplicates",
              &searchfiles.len() );
 
-    // create set to compare to
+    // create set of files to compare to
     let comparepath: PathBuf = PathBuf::from( &settings.compare );
     let comparefiles = fdupe::get_files_recursive( comparepath.as_path() );
 
     println!("against {} files",
              &comparefiles.len() );
 
-    let searchfiles: Vec< Result<FileIdentification, std::io::Error>> = searchfiles.par_iter()
-        .map( |x| fdupe::FileIdentification::new( &x ) )
+    let searchfiles: Vec< Result<FileContent, std::io::Error>> = searchfiles.par_iter()
+        .map( |x| fdupe::FileContent::from_path( &x ) )
         .collect();
 
-    let comparefiles: Vec< Result<FileIdentification, std::io::Error>> = comparefiles.par_iter()
-        .map( |x| fdupe::FileIdentification::new( &x ) )
+    let comparefiles: Vec< Result<FileContent, std::io::Error>> = comparefiles.par_iter()
+        .map( |x| fdupe::FileContent::from_path( &x ) )
         .collect();
 
-    let searchfiles: Vec< fdupe::FileIdentification > = searchfiles.into_iter()
+    let searchfiles: Vec< fdupe::FileContent > = searchfiles.into_iter()
         .flat_map( |x| x)
         .collect();
 
-    let mut comparefiles: Vec< fdupe::FileIdentification > = comparefiles.into_iter()
+    let mut comparefiles: Vec< fdupe::FileContent > = comparefiles.into_iter()
         .flat_map( |x| x)
         .collect();
 
-    let mut reports: Vec< fdupe::DuplicateReport > = Vec::new();
-    for (i, file) in searchfiles.iter().enumerate() {
-        // dont check files both ways, have they been checked once, dont check again
-        print!("\rChecking: {}/{}", i +1, &searchfiles.len() );
-        if !file_has_been_checked( &file, &reports ) {
-            let report = DuplicateReport::new( &file, &comparefiles );
-            for dupe in report.duplicates() {
-                comparefiles.remove_item( &dupe );
-                comparefiles.remove_item( &file );
-            }
-            reports.push( report );
-        }
-    }
     println!();
 
-    // let reports: Vec< fdupe::DuplicateReport > = searchfiles.iter()
-    //     .map( |x| fdupe::DuplicateReport::new( x, &comparefiles ) )
-    //     .collect();
-
-    for report in reports {
-        println!("\n");
-        report.print();
-        println!("\n");
-    }
 }
 
 fn main() {
