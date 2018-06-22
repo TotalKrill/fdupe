@@ -14,10 +14,9 @@ use std::fs;
 mod file;
 mod hasher;
 mod lazyfile;
-mod metadata;
 
 pub use file::FileContent;
-pub use metadata::Metadata;
+pub use std::fs::Metadata;
 pub use hasher::Hasher;
 
 pub fn get_files_recursive_at( path: &str ) -> Result< Vec<path::PathBuf>, std::io::Error> {
@@ -96,7 +95,21 @@ mod tests {
         let files = get_files_recursive_at( testdir )
             .expect("Failed getting the files");
         let original = FileContent::from_path( &path::PathBuf::from( oristr ))
-            .expect("Error with original");
+            .unwrap();
+
+        let comparefiles: Vec< Result<FileContent, std::io::Error>> = files.par_iter()
+        .map( |x| FileContent::from_path( &x ) )
+        .collect();
+
+        let mut dupes: i64 = 0;
+        for f in comparefiles {
+            if f.unwrap() == original {
+                dupes += 1;
+            }
+        }
+        println!("dupes: {}", dupes);
+        assert_eq!(dupes, 3);
+
 
     }
 

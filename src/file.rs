@@ -4,8 +4,10 @@ use std::cmp::max;
 use std::cell::RefCell;
 use std::io;
 
-use Metadata;
 use Hasher;
+
+use std::fs::Metadata;
+use std;
 
 #[derive(Debug)]
 /// File content is efficiently compared using this struct's `PartialOrd` implementation
@@ -17,9 +19,8 @@ pub struct FileContent {
 }
 
 impl FileContent {
-    pub fn from_path<P: Into<PathBuf>>(path: P) -> Result<Self, io::Error> {
-        let path = path.into();
-        let m = Metadata::from_path(&path)?;
+    pub fn from_path(path: &PathBuf) -> Result<Self, io::Error> {
+        let m = std::fs::metadata(&path)?;
         Ok(Self::new(path, m))
     }
 
@@ -52,9 +53,7 @@ impl Ord for FileContent {
 impl PartialOrd for FileContent {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // Different file sizes mean they're obviously different.
-        // Also different devices mean they're not the same as far as we're concerned
-        // (since search is intended for hardlinking and hardlinking only works within the same device).
-        let cmp = self.metadata.cmp(&other.metadata);
+        let cmp = self.metadata.len().cmp(&other.metadata.len());
         if cmp != Ordering::Equal {
             return Some(cmp);
         }
@@ -67,7 +66,7 @@ impl PartialOrd for FileContent {
         let mut hashes1 = self.hashes.borrow_mut();
         let mut hashes2 = other.hashes.borrow_mut();
 
-        hashes1.compare(&mut *hashes2, self.metadata.size, &self.path, &other.path).ok()
+        hashes1.compare(&mut *hashes2, self.metadata.len(), &self.path, &other.path).ok()
     }
 }
 
