@@ -1,4 +1,5 @@
 #![feature( vec_remove_item )]
+#![feature(drain_filter)]
 use std::{path, env, path::PathBuf };
 
 extern crate fdupe;
@@ -15,6 +16,7 @@ struct Settings{
 }
 mod file;
 use fdupe::FileContent;
+
 
 fn parse_args( _args: &[String]) -> Settings
 {
@@ -57,31 +59,44 @@ fn run( settings: &Settings) {
 
     println!( "Checking {} files for duplicates",
              &searchfiles.len() );
+    // let comparefiles = Vec::new();
+    // if  &settings.search == &settings.compare {
+    //     let comparefiles = searchfiles.clone();
+    // } else {
+        // create set of files to compare to
+        let comparepath: PathBuf = PathBuf::from( &settings.compare );
+        let comparefiles = fdupe::get_files_recursive( comparepath.as_path() );
+    //  }
 
-    // create set of files to compare to
-    let comparepath: PathBuf = PathBuf::from( &settings.compare );
-    let comparefiles = fdupe::get_files_recursive( comparepath.as_path() );
+    println!("against {} files", &comparefiles.len() );
 
-    println!("against {} files",
-             &comparefiles.len() );
-
-    let searchfiles: Vec< Result<FileContent, std::io::Error>> = searchfiles.par_iter()
+    let searchfiles: Vec< FileContent> = searchfiles.par_iter()
         .map( |x| fdupe::FileContent::from_path( &x ) )
+        .filter_map(|e| e.ok())
         .collect();
 
-    let comparefiles: Vec< Result<FileContent, std::io::Error>> = comparefiles.par_iter()
+    let mut comparefiles: Vec< FileContent > = comparefiles.par_iter()
         .map( |x| fdupe::FileContent::from_path( &x ) )
+        .filter_map(|e| e.ok())
         .collect();
 
-    let searchfiles: Vec< fdupe::FileContent > = searchfiles.into_iter()
-        .flat_map( |x| x)
-        .collect();
+    let mut dupesets = Vec::with_capacity(searchfiles.len());
+    let mut count = 0;
 
-    let mut comparefiles: Vec< fdupe::FileContent > = comparefiles.into_iter()
-        .flat_map( |x| x)
-        .collect();
+    // do a while loop here agains size of searchfiles,
+    // then remove files from searchfiles
+    for original in &searchfiles {
+        count = count + 1;
+        print!("\rFiles {}/{}",
+            count,
+            searchfiles.len());
 
-    println!();
+        let mut dupes: Vec< FileContent > = comparefiles
+            .drain_filter( |x| &x == &original )
+            .collect();
+
+        dupesets.push( dupes );
+        }
 
 }
 

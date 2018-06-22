@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::cmp::Ordering;
-use std::cmp::max;
 use std::cell::RefCell;
 use std::io;
 
@@ -12,7 +11,7 @@ use std;
 #[derive(Debug)]
 /// File content is efficiently compared using this struct's `PartialOrd` implementation
 pub struct FileContent {
-    path: PathBuf,
+    pub path: PathBuf,
     metadata: Metadata,
     /// Hashes of content, calculated incrementally
     hashes: RefCell<Hasher>,
@@ -30,7 +29,7 @@ impl FileContent {
         FileContent {
             path: path,
             metadata: metadata,
-            hashes: RefCell::new(Hasher::new()),
+            hashes: RefCell::new( Hasher::new() ),
         }
     }
 }

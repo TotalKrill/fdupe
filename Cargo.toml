@@ -5,7 +5,7 @@ authors = ["Kristoffer Ödmark <kristoffer.odmark90@gmail.com>"]
 
 [dependencies]
 rayon = "*"
-sha1 = "0.2.0"
+sha1 = "0.6.0"
 [dev-dependencies]
 file = "1.1.1"
 tempdir = "0.3.5"
