@@ -20,6 +20,7 @@ pub struct FileContent {
 
 impl FileContent {
     pub fn from_path(path: &PathBuf) -> Result<Self, io::Error> {
+        let path = path.canonicalize()?;
         let m = std::fs::metadata(&path)?;
         Ok(Self::new(path, m))
     }
@@ -39,6 +40,10 @@ impl Eq for FileContent {
 
 impl PartialEq for FileContent {
     fn eq(&self, other: &Self) -> bool {
+        // Same canonical path mean they are the same file, not equal in this case
+        if self.path == other.path {
+            return false;
+        }
         self.partial_cmp(other).map(|o|o == Ordering::Equal).unwrap_or(false)
     }
 }
