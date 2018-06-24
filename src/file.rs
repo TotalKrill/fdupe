@@ -19,7 +19,7 @@ pub struct FileContent {
 
 impl FileContent {
     pub fn from_path(path: &PathBuf) -> Result<Self, io::Error> {
-        let path = path.canonicalize()?;
+        //let path = path.canonicalize()?;
         let m = std::fs::metadata(&path)?;
         Ok(Self::new(path, m))
     }
@@ -31,6 +31,9 @@ impl FileContent {
             metadata: metadata,
             hashes: RefCell::new( Hasher::new() ),
         }
+    }
+    pub fn len(&self) -> u64 {
+        self.metadata.len()
     }
 }
 
@@ -62,7 +65,7 @@ impl PartialOrd for FileContent {
             return Some(cmp);
         }
 
-        // Fast pointer comparison
+        //Fast pointer comparison
         if self as *const _ == other as *const _ {
             return Some(Ordering::Equal);
         }

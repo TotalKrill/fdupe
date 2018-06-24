@@ -88,7 +88,7 @@ impl<'h> HashIter<'h> {
         // and reading files one by one without trashing.
         // Exponential increase is meant to be a compromise that allows finding
         // the difference in the first few KB, but grow quickly to read identical files faster.
-        self.next_buffer_size = min(size * 8, 32*1024*1024);
+        self.next_buffer_size = min(size * 8, 128*1024*1024);
 
         Ok(Some((&a_hash.ranges[i], &b_hash.ranges[i])))
     }

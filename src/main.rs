@@ -1,6 +1,8 @@
 #![feature( vec_remove_item )]
 #![feature(drain_filter)]
 use std::{path, env, path::PathBuf };
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry as BTreeEntry;
 
 extern crate fdupe;
 use fdupe::*;
@@ -16,7 +18,6 @@ struct Settings{
 }
 mod file;
 use fdupe::FileContent;
-
 
 fn parse_args( _args: &[String]) -> Settings
 {
@@ -49,54 +50,84 @@ fn run( settings: &Settings) {
     //set to find dupes for
     let searchpath: PathBuf = PathBuf::from( &settings.search );
 
-    let mut searchfiles: Vec< path::PathBuf> = Vec::new();
+    let mut searchpaths: Vec< path::PathBuf> = Vec::new();
 
     if settings.whole_dir {
-        searchfiles = fdupe::get_files_recursive( searchpath.as_path());
+        searchpaths = fdupe::get_files_recursive( searchpath.as_path());
     } else {
-        searchfiles.push( searchpath );
+        searchpaths.push( searchpath );
     }
 
-    println!( "Checking {} files for duplicates",
-             &searchfiles.len() );
-    // let comparefiles = Vec::new();
-    // if  &settings.search == &settings.compare {
-    //     let comparefiles = searchfiles.clone();
-    // } else {
-        // create set of files to compare to
-        let comparepath: PathBuf = PathBuf::from( &settings.compare );
-        let comparefiles = fdupe::get_files_recursive( comparepath.as_path() );
-    //  }
+    //println!( "Checking {} files for duplicates", &searchfiles.len() );
+    let comparepath: PathBuf = PathBuf::from( &settings.compare );
+    let comparepaths = fdupe::get_files_recursive( comparepath.as_path() );
 
-    println!("against {} files", &comparefiles.len() );
-
-    let searchfiles: Vec< FileContent> = searchfiles.par_iter()
+    //println!("against {} files", &comparefiles.len() );
+    let mut searchfiles: Vec< FileContent> = searchpaths
+        .par_iter()
         .map( |x| fdupe::FileContent::from_path( &x ) )
         .filter_map(|e| e.ok())
         .collect();
 
-    let mut comparefiles: Vec< FileContent > = comparefiles.par_iter()
-        .map( |x| fdupe::FileContent::from_path( &x ) )
-        .filter_map(|e| e.ok())
-        .collect();
-
-    let mut dupesets = Vec::with_capacity(searchfiles.len());
-    let mut count = 0;
-
-    // do a while loop here agains size of searchfiles,
-    // then remove files from searchfiles
-    for original in &searchfiles {
-        count = count + 1;
-        print!("\rFiles {}/{}",
-            count,
-            searchfiles.len());
-
-        let mut dupes: Vec< FileContent > = comparefiles
-            .drain_filter( |x| &x == &original )
+    if( searchpaths != comparepaths ) {
+        let mut comparefiles: Vec< FileContent > = comparepaths
+            .par_iter()
+            .map( |x| fdupe::FileContent::from_path( &x ) )
+            .filter_map(|e| e.ok())
             .collect();
+        searchfiles.append( &mut comparefiles );
+    }
+    //println!("Searching!");
 
-        dupesets.push( dupes );
+
+    let filecheckamount = searchfiles.len();
+    let mut count = 0;
+    let mut dupes = 0;
+    let mut totalsize = 0;
+    let mut sets = 0;
+    let mut btree: BTreeMap<&FileContent, Vec<&FileContent> > = BTreeMap::new();
+    for fc in &searchfiles {
+            print!("\rFiles {}/{}",
+                   count, filecheckamount);
+
+        match btree.entry( fc ) {
+            BTreeEntry::Vacant(e) => {
+                // Seems unique so far
+                e.insert( Vec::new() );
+            },
+            BTreeEntry::Occupied(mut e) => {
+                // Found a dupe!
+                dupes += 1;
+                totalsize += fc.len();
+                let filesets = e.get_mut();
+                if filesets.len() == 0 {
+                    sets += 1;
+                }
+                filesets.push(fc);
+            },
         }
+        count += 1;
+    }
+    println!();
+    println!("{} duplicate files (in {} sets), occupying {} megabytes",
+             dupes,
+             sets,
+             totalsize/(1024*1024) );
+    // println!();
+    // let mut filetotal = 0;
+    // let mut sets = 0;
+    // for r in dupesets.iter() {
+    //     sets += 1;
+    //     println!("{:?}",r.original.path);
+    //     for d in r.dupes.iter() {
+    //         println!("{:?}",d.path);
+    //         filetotal += 1;
+    //     }
+    //     println!();
+    // }
+    // println!("duplicates: {}, sets: {}", filetotal, sets );
+
+
 
 }
 
