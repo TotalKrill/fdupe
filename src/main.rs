@@ -113,22 +113,6 @@ fn run( settings: &Settings) {
              dupes,
              sets,
              totalsize/(1024*1024) );
-    // println!();
-    // let mut filetotal = 0;
-    // let mut sets = 0;
-    // for r in dupesets.iter() {
-    //     sets += 1;
-    //     println!("{:?}",r.original.path);
-    //     for d in r.dupes.iter() {
-    //         println!("{:?}",d.path);
-    //         filetotal += 1;
-    //     }
-    //     println!();
-    // }
-    // println!("duplicates: {}, sets: {}", filetotal, sets );
-
-
-
 }
 
 fn main() {
