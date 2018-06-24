@@ -69,7 +69,7 @@ fn run( settings: &Settings) {
         .filter_map(|e| e.ok())
         .collect();
 
-    if( searchpaths != comparepaths ) {
+    if searchpaths != comparepaths  {
         let mut comparefiles: Vec< FileContent > = comparepaths
             .par_iter()
             .map( |x| fdupe::FileContent::from_path( &x ) )

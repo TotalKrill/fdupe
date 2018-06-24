@@ -2,12 +2,6 @@
 extern crate rayon;
 extern crate sha1;
 
-use rayon::prelude::*;
-
-use std::fs::File;
-use std::io::Read;
-use std::io::BufReader;
-use std::fmt;
 use std::path;
 use std::fs;
 
