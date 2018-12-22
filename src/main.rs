@@ -1,124 +1,197 @@
-#![feature( vec_remove_item )]
 #![feature(drain_filter)]
-use std::{path, env, path::PathBuf };
-use std::collections::BTreeMap;
-use std::collections::btree_map::Entry as BTreeEntry;
 
-extern crate fdupe;
-use fdupe::*;
+#[macro_use]
+extern crate clap;
+extern crate walkdir;
+extern crate pretty_bytes;
 
-extern crate rayon;
-use rayon::prelude::*;
-
-
-struct Settings{
-    search: String,
-    compare: String,
-    whole_dir: bool,
-}
 mod file;
-use fdupe::FileContent;
+mod hasher;
+mod lazyfile;
 
-fn parse_args( _args: &[String]) -> Settings
-{
-    let mut settings: Settings = Settings {
-        search: String::from("."),
-        compare: String::from("."),
-        whole_dir: true,
-    };
+use clap::{App, Arg};
+use file::FileContent;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use walkdir::WalkDir;
+use pretty_bytes::converter::convert;
+use std::io;
+use std::fs;
+use std::io::Write;
 
-    if _args.len() < 2  {
-        // Search for dupes in current folder
-        println!("Finding dupes in current folder:");
-    } else if _args.len() < 3 {
-        // assume we want to compare current directory with the given path
-        settings.compare = _args[1].clone();
-        let res = path::PathBuf::from( &settings.compare );
-        if !res.is_dir() {
-            settings.whole_dir = false;
-        }
-    } else {
-        // assume we want to compare arg 1 directory with the other paths
-        settings.search = _args[1].clone();
-        settings.compare = _args[2].clone();
-    }
-    settings
+struct AppSettings {
+    originals_folder: String,
+    original_depth: usize,
+    checkfolder: String,
+    check_depth: usize,
+    action: Actions,
 }
 
-fn run( settings: &Settings) {
+fn parse_args() -> AppSettings {
+    let maxstr = &std::usize::MAX.to_string();
 
-    //set to find dupes for
-    let searchpath: PathBuf = PathBuf::from( &settings.search );
+    let matches = App::new("ripdupes")
+        .version("1.0")
+        .arg(
+            Arg::with_name("originals-path")
+                .help("The path of the files to be treated as orginals")
+                .long("originals-path")
+                .required(true)
+                .short("o")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("check-path")
+                .help("Folder to check for duplicates in")
+                .long("check-path")
+                .required(true)
+                .short("d")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("original-depth")
+                .help("Depth of originals directory traversal")
+                .long("odepth")
+                .takes_value(true)
+                .default_value(maxstr),
+        )
+        .arg(
+            Arg::with_name("check-depth")
+                .help("Depth of compare to directory traversal")
+                .long("cdepth")
+                .takes_value(true)
+                .default_value(maxstr),
+        )
+        .arg(
+            Arg::with_name("action").
+            help("The Action to use on the duplicates")
+                .long("action")
+                .takes_value(true)
+                .possible_values(&Actions::variants())
+        )
+        .get_matches();
 
-    let mut searchpaths: Vec< path::PathBuf> = Vec::new();
+    let opath = matches
+        .value_of("originals-path")
+        .expect("invalid pathname");
 
-    if settings.whole_dir {
-        searchpaths = fdupe::get_files_recursive( searchpath.as_path());
-    } else {
-        searchpaths.push( searchpath );
+    let cpath = matches.value_of("check-path").expect("invalid pathname");
+
+    let odepth: usize = matches
+        .value_of("original-depth")
+        .expect("invalid depth")
+        .parse()
+        .expect("invalid depth");
+
+    let cdepth: usize = matches
+        .value_of("check-depth")
+        .expect("invalid depth")
+        .parse()
+        .expect("invalid depth");
+
+    let t = value_t!(matches.value_of("action"), Actions).unwrap_or(Actions::Summarize);
+
+    AppSettings {
+        originals_folder: opath.to_string(),
+        original_depth: odepth,
+        checkfolder: cpath.to_string(),
+        check_depth: cdepth,
+        action: t
     }
+}
+/// Gets only the files from the specified directory with specified depth of subfolders
+pub fn get_files(path: &str, depth: usize) -> Vec<FileContent> {
+    WalkDir::new(path)
+        .max_depth(depth)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_file())
+        .filter_map(|entry| FileContent::from_path(entry.path()).ok())
+        .collect()
+}
 
-    //println!( "Checking {} files for duplicates", &searchfiles.len() );
-    let comparepath: PathBuf = PathBuf::from( &settings.compare );
-    let comparepaths = fdupe::get_files_recursive( comparepath.as_path() );
+arg_enum!{
+#[derive(Debug)]
+enum Actions {
+    Print,
+    Delete,
+    Exec,
+    Summarize,
+}
+}
 
-    //println!("against {} files", &comparefiles.len() );
-    let mut searchfiles: Vec< FileContent> = searchpaths
-        .par_iter()
-        .map( |x| fdupe::FileContent::from_path( &x ) )
-        .filter_map(|e| e.ok())
-        .collect();
-
-    if searchpaths != comparepaths  {
-        let mut comparefiles: Vec< FileContent > = comparepaths
-            .par_iter()
-            .map( |x| fdupe::FileContent::from_path( &x ) )
-            .filter_map(|e| e.ok())
-            .collect();
-        searchfiles.append( &mut comparefiles );
-    }
-    //println!("Searching!");
-
-
-    let filecheckamount = searchfiles.len();
-    let mut count = 0;
-    let mut dupes = 0;
-    let mut totalsize = 0;
-    let mut sets = 0;
-    let mut btree: BTreeMap<&FileContent, Vec<&FileContent> > = BTreeMap::new();
-    for fc in &searchfiles {
-            print!("\rFiles {}/{}",
-                   count, filecheckamount);
-
-        match btree.entry( fc ) {
-            BTreeEntry::Vacant(e) => {
-                // Seems unique so far
-                e.insert( Vec::new() );
-            },
-            BTreeEntry::Occupied(mut e) => {
-                // Found a dupe!
-                dupes += 1;
-                totalsize += fc.len();
-                let filesets = e.get_mut();
-                if filesets.len() == 0 {
-                    sets += 1;
-                }
-                filesets.push(fc);
-            },
-        }
-        count += 1;
-    }
-    println!();
-    println!("{} duplicate files (in {} sets), occupying {} megabytes",
-             dupes,
-             sets,
-             totalsize/(1024*1024) );
+struct DupeSet<'a> {
+    pub original: &'a FileContent,
+    pub dupes: Vec<FileContent>,
 }
 
 fn main() {
+    let args = parse_args();
 
-    let args: Vec<String> = env::args().collect();
-    let args = parse_args( &args );
-    run( &args );
+    let origs = get_files(&args.originals_folder, args.original_depth);
+    let mut dupesets: Vec<DupeSet> = Vec::new();
+
+    let mut checks = get_files(&args.checkfolder, args.check_depth);
+
+    println!("{} Originals checked against {} files", origs.len(), checks.len());
+    let mut count = 1;
+    let totlen = origs.len();
+    for orig in &origs {
+        print!("\r{}/{}: {:.1}% ", count, totlen, count as f64 /totlen as f64 * 100.0);
+        io::stdout().flush().ok().expect("Could not flush stdout");
+        count +=1;
+
+        let duplicates: Vec<FileContent> = checks.drain_filter(|checked| *checked == *orig).collect();
+        //println!("{:?}", orig.path);
+        if duplicates.len() > 0 {
+            let set = DupeSet {
+                original: orig,
+                dupes: duplicates,
+            };
+            dupesets.push( set );
+        }
+    }
+    println!("");
+
+    match args.action {
+        Actions::Print => {
+            for dupe in &dupesets {
+                println!("=========");
+                println!("Original: {:?}", dupe.original.path);
+                for d in &dupe.dupes {
+                    println!("Duplicate: {:?}", d.path);
+                }
+            }
+        },
+        Actions::Delete => {
+            let mut totdupes = 0;
+            let mut totsize = 0;
+            for dupe in &dupesets {
+                for d in &dupe.dupes {
+                    totsize += d.len();
+                    totdupes += 1;
+                    fs::remove_file(&d.path);
+                }
+            }
+            println!("{} originals had {} dupes occupying {} bytes, that were removed",
+                     dupesets.len(), totdupes, convert(totsize as f64));
+        },
+        Actions::Summarize => {
+            let mut totdupes = 0;
+            let mut totsize = 0;
+            for dupe in &dupesets {
+                for d in &dupe.dupes {
+                    totsize += d.len();
+                    totdupes += 1;
+                }
+            }
+            println!("{} originals had {} dupes occupying {} bytes",
+                     dupesets.len(), totdupes, convert(totsize as f64));
+        },
+        Actions::Exec => {
+            println!("Exec is not implemented yet");
+        },
+
+    }
 
 }

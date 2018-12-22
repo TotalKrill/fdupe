@@ -1,12 +1,12 @@
-use std::path::PathBuf;
-use std::cmp::Ordering;
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::io;
-
-use Hasher;
+use std::path::Path;
+use std::path::PathBuf;
 
 use std::fs::Metadata;
-use std;
+
+use hasher::Hasher;
 
 #[derive(Debug)]
 /// File content is efficiently compared using this struct's `PartialOrd` implementation
@@ -18,7 +18,7 @@ pub struct FileContent {
 }
 
 impl FileContent {
-    pub fn from_path(path: &PathBuf) -> Result<Self, io::Error> {
+    pub fn from_path(path: &Path) -> Result<Self, io::Error> {
         //let path = path.canonicalize()?;
         let m = std::fs::metadata(&path)?;
         Ok(Self::new(path, m))
@@ -29,7 +29,7 @@ impl FileContent {
         FileContent {
             path: path,
             metadata: metadata,
-            hashes: RefCell::new( Hasher::new() ),
+            hashes: RefCell::new(Hasher::new()),
         }
     }
     pub fn len(&self) -> u64 {
@@ -37,16 +37,25 @@ impl FileContent {
     }
 }
 
-impl Eq for FileContent {
-}
+impl Eq for FileContent {}
 
 impl PartialEq for FileContent {
     fn eq(&self, other: &Self) -> bool {
-        // Same canonical path mean they are the same file, not equal in this case
-        if self.path == other.path {
+        let retval = self
+            .partial_cmp(other)
+            .map(|o| o == Ordering::Equal)
+            .unwrap_or(false);
+
+        // Same canonical path mean they are the same file, for the usecase of this software
+        // the same file shall not be treated as a duplicate.
+        let selfcanonical = self.path.canonicalize().unwrap();
+
+        let othercanonical = other.path.canonicalize().unwrap();
+
+        if othercanonical == selfcanonical {
             return false;
         }
-        self.partial_cmp(other).map(|o|o == Ordering::Equal).unwrap_or(false)
+        retval
     }
 }
 
@@ -73,7 +82,8 @@ impl PartialOrd for FileContent {
         let mut hashes1 = self.hashes.borrow_mut();
         let mut hashes2 = other.hashes.borrow_mut();
 
-        hashes1.compare(&mut *hashes2, self.metadata.len(), &self.path, &other.path).ok()
+        hashes1
+            .compare(&mut *hashes2, self.metadata.len(), &self.path, &other.path)
+            .ok()
     }
 }
-
