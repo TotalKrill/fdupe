@@ -1,6 +1,5 @@
 #![feature(drain_filter)]
 
-#[macro_use]
 extern crate clap;
 extern crate walkdir;
 extern crate pretty_bytes;
@@ -11,8 +10,6 @@ mod lazyfile;
 
 use clap::{App, Arg};
 use file::FileContent;
-use std::collections::HashMap;
-use std::path::PathBuf;
 use walkdir::WalkDir;
 use pretty_bytes::converter::convert;
 use std::io;
@@ -24,7 +21,9 @@ struct AppSettings {
     original_depth: usize,
     checkfolder: String,
     check_depth: usize,
-    action: Actions,
+    delete: bool,
+    noprint: bool,
+    summarize: bool,
 }
 
 fn parse_args() -> AppSettings {
@@ -45,7 +44,7 @@ fn parse_args() -> AppSettings {
                 .help("Folder to check for duplicates in")
                 .long("check-path")
                 .required(true)
-                .short("d")
+                .short("c")
                 .takes_value(true),
         )
         .arg(
@@ -63,11 +62,15 @@ fn parse_args() -> AppSettings {
                 .default_value(maxstr),
         )
         .arg(
-            Arg::with_name("action").
-            help("The Action to use on the duplicates")
-                .long("action")
-                .takes_value(true)
-                .possible_values(&Actions::variants())
+            Arg::with_name("quiet")
+                .help("Dont print every output")
+                .short("q")
+                .long("quiet"),
+        )
+        .arg(
+            Arg::with_name("delete")
+                .help("Delete the duplicates")
+                .long("delete"),
         )
         .get_matches();
 
@@ -89,14 +92,18 @@ fn parse_args() -> AppSettings {
         .parse()
         .expect("invalid depth");
 
-    let t = value_t!(matches.value_of("action"), Actions).unwrap_or(Actions::Summarize);
+    let del = matches.is_present("delete");
+    let sum = true;
+    let noprint = matches.is_present("no-print");
 
     AppSettings {
         originals_folder: opath.to_string(),
         original_depth: odepth,
         checkfolder: cpath.to_string(),
         check_depth: cdepth,
-        action: t
+        summarize: sum,
+        noprint: noprint,
+        delete: del,
     }
 }
 /// Gets only the files from the specified directory with specified depth of subfolders
@@ -108,16 +115,6 @@ pub fn get_files(path: &str, depth: usize) -> Vec<FileContent> {
         .filter(|entry| entry.file_type().is_file())
         .filter_map(|entry| FileContent::from_path(entry.path()).ok())
         .collect()
-}
-
-arg_enum!{
-#[derive(Debug)]
-enum Actions {
-    Print,
-    Delete,
-    Exec,
-    Summarize,
-}
 }
 
 struct DupeSet<'a> {
@@ -153,45 +150,42 @@ fn main() {
     }
     println!("");
 
-    match args.action {
-        Actions::Print => {
-            for dupe in &dupesets {
-                println!("=========");
-                println!("Original: {:?}", dupe.original.path);
-                for d in &dupe.dupes {
-                    println!("Duplicate: {:?}", d.path);
-                }
-            }
-        },
-        Actions::Delete => {
-            let mut totdupes = 0;
-            let mut totsize = 0;
-            for dupe in &dupesets {
-                for d in &dupe.dupes {
-                    totsize += d.len();
-                    totdupes += 1;
-                    fs::remove_file(&d.path);
-                }
-            }
-            println!("{} originals had {} dupes occupying {} bytes, that were removed",
-                     dupesets.len(), totdupes, convert(totsize as f64));
-        },
-        Actions::Summarize => {
-            let mut totdupes = 0;
-            let mut totsize = 0;
-            for dupe in &dupesets {
-                for d in &dupe.dupes {
-                    totsize += d.len();
-                    totdupes += 1;
-                }
-            }
-            println!("{} originals had {} dupes occupying {} bytes",
-                     dupesets.len(), totdupes, convert(totsize as f64));
-        },
-        Actions::Exec => {
-            println!("Exec is not implemented yet");
-        },
+    if !args.noprint {
 
+        for dupe in &dupesets {
+            println!("=========");
+            println!("Original: {:?}", dupe.original.path);
+            for d in &dupe.dupes {
+                println!("Duplicate: {:?}", d.path);
+            }
+        }
+        println!("=========");
     }
 
+    if args.delete {
+        let mut totdupes = 0;
+        let mut totsize = 0;
+        for dupe in &dupesets {
+            for d in &dupe.dupes {
+                totsize += d.len();
+                totdupes += 1;
+                let _res = fs::remove_file( &d.path );
+            }
+        }
+        println!("{} originals had {} dupes occupying {}, that were removed",
+                 dupesets.len(), totdupes, convert( totsize as f64 ));
+    }
+    //Delete command also prints out sum
+    if args.summarize && !args.delete {
+        let mut totdupes = 0;
+        let mut totsize = 0;
+        for dupe in &dupesets {
+            for d in &dupe.dupes {
+                totsize += d.len();
+                totdupes += 1;
+            }
+        }
+        println!("{} originals has {} dupes occupying {}",
+                 dupesets.len(), totdupes, convert( totsize as f64 ));
+    }
 }
