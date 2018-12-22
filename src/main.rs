@@ -169,7 +169,10 @@ fn main() {
             for d in &dupe.dupes {
                 totsize += d.len();
                 totdupes += 1;
-                let _res = fs::remove_file( &d.path );
+                let res = fs::remove_file( &d.path );
+                if let Err(res) = res {
+                    println!("Error removing file: {}", res);
+                }
             }
         }
         println!("{} originals had {} dupes occupying {}, that were removed",
