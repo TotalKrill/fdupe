@@ -125,7 +125,10 @@ struct DupeSet<'a> {
 fn main() {
     let args = parse_args();
 
-    let origs = get_files(&args.originals_folder, args.original_depth);
+    let mut origs = get_files(&args.originals_folder, args.original_depth);
+    origs.sort();
+    origs.dedup();
+
     let mut dupesets: Vec<DupeSet> = Vec::new();
 
     let mut checks = get_files(&args.checkfolder, args.check_depth);
