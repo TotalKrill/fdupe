@@ -1,19 +1,16 @@
 #![feature(drain_filter)]
 #![feature(test)]
 
-extern crate rayon;
 extern crate sha1;
 extern crate walkdir;
 
 
 pub mod file;
-pub mod hasher;
-pub mod lazyfile;
+mod hasher;
+mod lazyfile;
 
-pub use file::FileContent;
-pub use hasher::Hasher;
-pub use sha1::Sha1;
-pub use std::fs::Metadata;
+pub use crate::file::FileContent;
+
 use std::io;
 use std::io::Write;
 use walkdir::WalkDir;
@@ -23,7 +20,23 @@ pub struct DupeSet<'a> {
     pub dupes: Vec<FileContent>,
 }
 
-/// Gets only the files from the specified directory with specified depth of subfolders
+/// Gets only the files from the specified directory with specified traversal depth of subfolders
+/// # Examples
+/// ```
+///    use filedupes::get_files;
+///    // get the files in the closest subfolder
+///    let files = get_files("./",2);
+/// ```
+/// ```
+///    use filedupes::get_files;
+///    // traverse all the subfolder
+///    let all_files = get_files("./",std::usize::MAX);
+/// ```
+/// ```
+///    use filedupes::get_files;
+///    // get only one file as filecontent, to be lazily compared
+///    let only_one_file = get_files("./file",0);
+/// ```
 pub fn get_files(path: &str, depth: usize) -> Vec<FileContent> {
     WalkDir::new(path)
         .max_depth(depth)
@@ -34,7 +47,23 @@ pub fn get_files(path: &str, depth: usize) -> Vec<FileContent> {
         .collect()
 }
 
-pub fn check_duplicates<'a>( origs: &'a Vec<FileContent>, checks: &'a mut Vec<FileContent> ) ->
+/// Returns a vector with dupesets
+///
+/// The vector of checked values needs to be mutable since the vector will be drained during
+/// checking to avoid rechecking duplicates already found
+///
+/// # Examples
+/// ```
+///    use filedupes::*;
+///    // get the files in the closest subfolder
+///    let mut origs = get_files(&"./",2);
+///
+///    // compare to all files in all the subfolders
+///    let mut checks = get_files(&"./", std::usize::MAX);
+///
+///    let dupesets = check_duplicates(&origs, &mut checks);
+/// ```
+pub fn check_duplicates<'a>( origs: &'a Vec<FileContent>, checks: &mut Vec<FileContent> ) ->
         Vec <DupeSet<'a>>
 {
     let mut count = 1;
@@ -49,6 +78,7 @@ pub fn check_duplicates<'a>( origs: &'a Vec<FileContent>, checks: &'a mut Vec<Fi
         let duplicates: Vec<FileContent> = checks.drain_filter(|checked| *checked == *orig)
             .collect();
         //println!("{:?}", orig.path);
+
         if duplicates.len() > 0 {
             let set = DupeSet {
                 original: orig,
@@ -69,12 +99,6 @@ mod tests {
     use self::test::Bencher;
 
     #[test]
-    fn identify_img_file() {
-        let oristr = &String::from("./testdata/cats.jpg");
-        let original = FileContent::from_path(&PathBuf::from(oristr)).expect("Error with original");
-    }
-
-    #[test]
     fn find_files_ignore_errors() {
         let files = get_files("./testdata", 1000);
 
@@ -93,6 +117,20 @@ mod tests {
         assert_eq!(dupes.len(), 1, "More than one dupe set found"); // dupes will be a vector of one
         assert_eq!(dupes.first().unwrap().dupes.len(), 3, "Wrong amount of duplicates"); // should be 3 copies of the original
     }
+
+    fn find_dupes_of_original_limit() {
+        let oristr = "./testdata/original";
+        let testdir = "./testdata";
+        let originals = get_files(oristr, 0);
+        let mut checks = get_files(testdir, 1);
+        assert_eq!(originals.len(), 1, "More than one original file found"); // dupes will be a vector of one
+
+        let dupes = check_duplicates(&originals, &mut checks);
+        println!("dupes: {}", dupes.len());
+        assert_eq!(dupes.len(), 1, "More than one dupe set found"); // dupes will be a vector of one
+        assert_eq!(dupes.first().unwrap().dupes.len(), 2, "Wrong amount of duplicates"); // should be 3 copies of the original
+    }
+
     #[test]
     fn find_no_dupes() {
         let oristr = "./testdata/a";

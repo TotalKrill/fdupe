@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use std::fs::Metadata;
 
-use hasher::Hasher;
+use crate::hasher::Hasher;
 
 #[derive(Debug)]
 /// File content is efficiently compared using this struct's `PartialOrd` implementation

@@ -1,6 +1,6 @@
 extern crate sha1;
 
-use lazyfile::LazyFile;
+use crate::lazyfile::LazyFile;
 
 use std::cmp::{min, Ordering};
 use std::io;

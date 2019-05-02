@@ -1,13 +1,13 @@
 extern crate clap;
 extern crate walkdir;
 extern crate pretty_bytes;
-extern crate dupefiles;
+extern crate filedupes;
 
 use clap::{App, Arg};
 use pretty_bytes::converter::convert;
 use std::fs;
 
-use dupefiles::*;
+use filedupes::*;
 
 struct AppSettings {
     originals_folder: String,
