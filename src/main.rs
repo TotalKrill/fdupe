@@ -1,20 +1,13 @@
-#![feature(drain_filter)]
-
 extern crate clap;
 extern crate walkdir;
 extern crate pretty_bytes;
-
-mod file;
-mod hasher;
-mod lazyfile;
+extern crate dupefiles;
 
 use clap::{App, Arg};
-use file::FileContent;
-use walkdir::WalkDir;
 use pretty_bytes::converter::convert;
-use std::io;
 use std::fs;
-use std::io::Write;
+
+use dupefiles::*;
 
 struct AppSettings {
     originals_folder: String,
@@ -106,21 +99,7 @@ fn parse_args() -> AppSettings {
         delete: del,
     }
 }
-/// Gets only the files from the specified directory with specified depth of subfolders
-pub fn get_files(path: &str, depth: usize) -> Vec<FileContent> {
-    WalkDir::new(path)
-        .max_depth(depth)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_file())
-        .filter_map(|entry| FileContent::from_path(entry.path()).ok())
-        .collect()
-}
 
-struct DupeSet<'a> {
-    pub original: &'a FileContent,
-    pub dupes: Vec<FileContent>,
-}
 
 fn main() {
     let args = parse_args();
@@ -129,29 +108,9 @@ fn main() {
     origs.sort();
     origs.dedup();
 
-    let mut dupesets: Vec<DupeSet> = Vec::new();
-
     let mut checks = get_files(&args.checkfolder, args.check_depth);
-
     println!("{} Originals checked against {} files", origs.len(), checks.len());
-    let mut count = 1;
-    let totlen = origs.len();
-    for orig in &origs {
-        print!("\r{}/{}: {:.1}% ", count, totlen, count as f64 /totlen as f64 * 100.0);
-        io::stdout().flush().ok().expect("Could not flush stdout");
-        count +=1;
-
-        let duplicates: Vec<FileContent> = checks.drain_filter(|checked| *checked == *orig).collect();
-        //println!("{:?}", orig.path);
-        if duplicates.len() > 0 {
-            let set = DupeSet {
-                original: orig,
-                dupes: duplicates,
-            };
-            dupesets.push( set );
-        }
-    }
-    println!("");
+    let dupesets = check_duplicates(&origs, &mut checks);
 
     if !args.noprint {
 

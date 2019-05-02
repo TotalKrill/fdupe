@@ -4,12 +4,21 @@ version = "0.1.0"
 authors = ["Kristoffer Ödmark <kristoffer.odmark90@gmail.com>"]
 
 [dependencies]
-rayon = "*"
+rayon = "1.0.3"
 sha1 = "0.6.0"
-clap = "*"
-walkdir = "*"
-bencher = "*"
-pretty-bytes = "*"
+clap = "2.32.0"
+walkdir = "2.2.7"
+bencher = "0.1.5"
+pretty-bytes = "0.2.2"
+
 [dev-dependencies]
 file = "1.1.1"
 tempdir = "0.3.5"
+
+[lib]
+name = "dupefiles"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ripdupe"
+path = "src/main.rs"
