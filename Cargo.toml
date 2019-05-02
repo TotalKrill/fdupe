@@ -6,6 +6,7 @@ edition = "2018"
 description = "Deduplicate sets of files"
 license = "MIT"
 repository = "https://github.com/TotalKrill/filedupes"
+exclude = ["testdata/*"]
 
 [dependencies]
 sha1 = "0.6.0"
@@ -25,3 +26,4 @@ path = "src/lib.rs"
 [[bin]]
 name = "ripdupe"
 path = "src/main.rs"
+
