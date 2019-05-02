@@ -1,5 +1,8 @@
 # filedupes
 
+[![Latest version](https://img.shields.io/crates/v/filedupes.svg)](https://crates.io/crates/filedupes)
+![License](https://img.shields.io/crates/l/filedupes.svg)
+
 Library that can be used to lazily (not load entire file directly) check for duplicates on two vectors of filecontent
 
 Uses file hashing code from [dupe-krill](https://github.com/kornelski/dupe-krill)
